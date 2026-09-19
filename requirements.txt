@@ -1,0 +1,15 @@
+torch>=2.1
+torchvision>=0.16
+numpy
+scipy
+scikit-image
+nibabel
+medpy
+pandas
+matplotlib
+opencv-python-headless
+plotly
+dash
+segment-anything
+pyyaml
+tqdm

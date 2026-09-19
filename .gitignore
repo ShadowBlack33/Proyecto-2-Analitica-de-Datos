@@ -1,0 +1,32 @@
+# Datos (pesan GB, nunca se versionan)
+data/
+*.mha
+*.nii
+*.nii.gz
+*.zip
+
+# Pesos entrenados
+checkpoints/*.pth
+checkpoints/*.pt
+!checkpoints/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+.venv/
+*.egg-info/
+
+# Entornos / secretos
+.env
+*.token
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Logs de entrenamiento
+runs/
+wandb/
+*.log
