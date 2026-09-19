@@ -153,6 +153,9 @@ Uso academico — Proyecto integrador Corte 2, Analitica de Datos, UAO 2026-2.
 ## 👥 Equipo
 
 **Carlos Andres Orozco Caicedo** — Data Engineer & AI Engineer · Colombia 🇨🇴
+
 **Jose David Mesa Ramirez** — Data Engineer & AI Engineer · Colombia 🇨🇴
+
 **Sara Lucia Rojas Mejia** — Data Engineer & AI Engineer · Colombia 🇨🇴
+
 **Esteban Cobo Gomez ** — Data Engineer & AI Engineer · Colombia 🇨🇴
