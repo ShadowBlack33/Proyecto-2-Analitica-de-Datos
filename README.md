@@ -158,4 +158,4 @@ Uso academico — Proyecto integrador Corte 2, Analitica de Datos, UAO 2026-2.
 
 **Sara Lucia Rojas Mejia** — Data Engineer & AI Engineer · Colombia 🇨🇴
 
-**Esteban Cobo Gomez ** — Data Engineer & AI Engineer · Colombia 🇨🇴
+**Esteban Cobo Gomez** — Data Engineer & AI Engineer · Colombia 🇨🇴
