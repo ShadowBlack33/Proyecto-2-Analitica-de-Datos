@@ -31,3 +31,4 @@ Thumbs.db
 /resultados/
 wandb/
 *.log
+avenv/
