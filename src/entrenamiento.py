@@ -94,9 +94,9 @@ def validar(modelo, loader, perdida: PerdidaPengwin, device, cabezas, cfg, fast=
     res = {f"val_{k}": v / max(n, 1) for k, v in suma.items()}
     partes = []
     if y_cls:
-        from sklearn.metrics import f1_score
+        from .eval.metricas_seg_cls import f1_macro
         y, p = np.concatenate(y_cls), np.concatenate(p_cls)
-        res["val_f1_cls"] = float(f1_score(y, p >= 0.5, average="macro", zero_division=0))
+        res["val_f1_cls"] = f1_macro(y, p >= 0.5)
         partes.append(res["val_f1_cls"])
     if preds:
         rd = resumen_deteccion(preds, gts)

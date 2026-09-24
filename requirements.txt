@@ -5,7 +5,6 @@ torchvision>=0.16
 numpy
 scipy
 scikit-image
-scikit-learn
 SimpleITK          # lee .mha (formato del dataset en Zenodo) y .nii/.nii.gz
 pyyaml
 matplotlib

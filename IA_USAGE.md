@@ -69,3 +69,20 @@ Formato de cada entrada:
 **Que se modifico manualmente:** (completar por el equipo al revisar y adaptar el codigo)
 
 **Analisis critico:** (completar: que se entendio, que se cambio y por que)
+
+## Sesion — eliminacion de scikit-learn (bloqueo de Windows)
+
+**Contexto:** en el PC de entrenamiento, Windows (Smart App Control / Application Control)
+bloqueo el DLL `scipy.stats._rcont`. scikit-learn importa `scipy.stats` al cargar, asi que
+`train.py` fallaba en la primera validacion.
+
+**Que se obtuvo de la IA:** F1, AUC-ROC (formula de Mann-Whitney con empates promediados)
+y matriz de confusion implementadas con NumPy en `src/eval/metricas_seg_cls.py`; se quito
+scikit-learn de `requirements.txt`; script `scripts/verificar_entorno.py` para diagnosticar.
+
+**Verificacion:** prueba `test_metricas_clasificacion_igual_a_sklearn` (resultados identicos
+a sklearn, incluidos empates y clases vacias). Se simulo el bloqueo (import de `scipy.stats`
+y `sklearn` fallando) y se corrieron pruebas, entrenamiento, evaluacion, inferencia y
+dashboard: todo funciona y las metricas coinciden con la version anterior.
+
+**Pendiente del equipo:** analisis critico y modificaciones manuales.

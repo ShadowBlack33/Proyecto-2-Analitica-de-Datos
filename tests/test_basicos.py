@@ -113,3 +113,25 @@ if __name__ == "__main__":
         if nombre.startswith("test_"):
             fn()
             print("ok", nombre)
+
+
+def test_metricas_clasificacion_igual_a_sklearn():
+    """F1, AUC y matriz de confusion propias == sklearn (si sklearn se puede importar)."""
+    import pytest
+    try:
+        from sklearn.metrics import confusion_matrix, f1_score, roc_auc_score
+    except Exception:
+        pytest.skip("sklearn no disponible (p. ej. bloqueado por Application Control)")
+    from src.eval.metricas_seg_cls import auc_binaria, f1_por_clase, matriz_confusion
+
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 2, (500, 3))
+    prob = np.clip(y * 0.3 + rng.random((500, 3)) * 0.7, 0, 1).round(2)   # redondeo -> empates
+    pred = prob >= 0.5
+    assert np.allclose(f1_por_clase(y, pred), f1_score(y, pred, average=None, zero_division=0))
+    for c in range(3):
+        assert abs(auc_binaria(y[:, c], prob[:, c]) - roc_auc_score(y[:, c], prob[:, c])) < 1e-12
+    a, b = rng.integers(0, 4, 1000), rng.integers(0, 4, 1000)
+    assert (matriz_confusion(a, b, 4) == confusion_matrix(a, b, labels=[0, 1, 2, 3])).all()
+    # caso borde: clase sin positivos ni predichos -> F1 0, como zero_division=0
+    assert f1_por_clase(np.zeros((5, 1)), np.zeros((5, 1)))[0] == 0.0

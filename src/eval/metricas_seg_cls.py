@@ -19,29 +19,83 @@ def _media_nan(v):
     return float(np.nanmean(v)) if np.isfinite(v).any() else float("nan")
 from scipy import ndimage as ndi
 from scipy.optimize import linear_sum_assignment
-from sklearn.metrics import confusion_matrix, f1_score, roc_auc_score
 
 from ..data.etiquetas import nombre_fragmento, region_de_etiqueta
 
 
 # ============================================================ clasificacion
+# Implementadas con NumPy, sin scikit-learn: en Windows con Smart App Control /
+# Application Control, scikit-learn falla al importar porque importa scipy.stats,
+# y la politica bloquea uno de sus DLL. Estas funciones replican exactamente las
+# de sklearn.metrics (verificadas contra sklearn en tests/test_basicos.py).
+
+def f1_por_clase(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+    """F1 de cada columna de un problema multi-etiqueta (N, C). 0 si no hay positivos
+    ni predichos (equivale a zero_division=0 de sklearn)."""
+    y_true = np.asarray(y_true).astype(bool)
+    y_pred = np.asarray(y_pred).astype(bool)
+    if y_true.ndim == 1:
+        y_true, y_pred = y_true[:, None], y_pred[:, None]
+    tp = (y_true & y_pred).sum(0).astype(float)
+    fp = (~y_true & y_pred).sum(0).astype(float)
+    fn = (y_true & ~y_pred).sum(0).astype(float)
+    den = 2 * tp + fp + fn
+    return np.where(den > 0, 2 * tp / np.maximum(den, 1e-12), 0.0)
+
+
+def f1_macro(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    return float(np.mean(f1_por_clase(y_true, y_pred)))
+
+
+def _rangos_promedio(x: np.ndarray) -> np.ndarray:
+    """Rangos 1..n con empates promediados (como scipy.stats.rankdata)."""
+    orden = np.argsort(x, kind="mergesort")
+    xs = x[orden]
+    rangos = np.empty(len(x), dtype=float)
+    i = 0
+    while i < len(x):
+        j = i
+        while j + 1 < len(x) and xs[j + 1] == xs[i]:
+            j += 1
+        rangos[orden[i:j + 1]] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    return rangos
+
+
+def auc_binaria(y: np.ndarray, score: np.ndarray) -> float:
+    """AUC-ROC por la formula de Mann-Whitney: probabilidad de que un positivo al azar
+    tenga mayor score que un negativo al azar (empates cuentan 1/2)."""
+    y = np.asarray(y).astype(bool)
+    score = np.asarray(score, dtype=float)
+    n_pos, n_neg = int(y.sum()), int((~y).sum())
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+    r = _rangos_promedio(score)
+    return float((r[y].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
+
+
+def matriz_confusion(y_true: np.ndarray, y_pred: np.ndarray, n_clases: int) -> np.ndarray:
+    """Filas = verdad, columnas = prediccion (misma convencion de sklearn)."""
+    idx = np.asarray(y_true, dtype=np.int64) * n_clases + np.asarray(y_pred, dtype=np.int64)
+    return np.bincount(idx.ravel(), minlength=n_clases * n_clases).reshape(n_clases, n_clases)
+
+
 def metricas_clasificacion(y_true: np.ndarray, y_prob: np.ndarray, umbral=0.5) -> dict:
     """y_true, y_prob (N, 3) presencia de SA/LI/RI por corte."""
     y_pred = (y_prob >= umbral).astype(int)
-    aucs = []
-    for c in range(y_true.shape[1]):
-        if len(np.unique(y_true[:, c])) == 2:
-            aucs.append(roc_auc_score(y_true[:, c], y_prob[:, c]))
+    aucs = [auc_binaria(y_true[:, c], y_prob[:, c]) for c in range(y_true.shape[1])
+            if len(np.unique(y_true[:, c])) == 2]
+    f1s = f1_por_clase(y_true, y_pred)
     return {
-        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
-        "f1_por_clase": dict(zip(["SA", "LI", "RI"], f1_score(y_true, y_pred, average=None, zero_division=0).tolist())),
+        "f1_macro": float(np.mean(f1s)),
+        "f1_por_clase": dict(zip(["SA", "LI", "RI"], f1s.tolist())),
         "auc_macro": float(np.mean(aucs)) if aucs else float("nan"),
     }
 
 
 def matriz_confusion_pixel(sem_gt: np.ndarray, sem_pred: np.ndarray, submuestreo=4) -> np.ndarray:
-    return confusion_matrix(sem_gt[..., ::submuestreo, ::submuestreo].ravel(),
-                            sem_pred[..., ::submuestreo, ::submuestreo].ravel(), labels=[0, 1, 2, 3])
+    return matriz_confusion(sem_gt[..., ::submuestreo, ::submuestreo].ravel(),
+                            sem_pred[..., ::submuestreo, ::submuestreo].ravel(), 4)
 
 
 # ============================================================ segmentacion
