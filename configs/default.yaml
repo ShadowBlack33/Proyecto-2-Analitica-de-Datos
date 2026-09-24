@@ -1,0 +1,97 @@
+# ============================================================
+# PENGWIN — configuracion central. Todo parametro ajustable vive aqui,
+# nunca "quemado" en el codigo, para que el informe pueda citar valores exactos.
+# ============================================================
+
+seed: 42
+
+rutas:
+  imagenes: data/raw/images        # donde quedan los .mha de part1 + part2 juntos
+  etiquetas: data/raw/labels       # donde quedan los .mha de PENGWIN_CT_train_labels
+  cache: data/cache                # cortes preprocesados (.npz por caso)
+  splits: data/splits.json
+  checkpoints: checkpoints
+  resultados: resultados
+
+datos:
+  resolucion: 256                  # enunciado: 224-256 px por corte
+  contexto: 1                      # 2.5D: cortes vecinos a cada lado -> 2*1+1 = 3 canales
+  ventana_hu: [-200, 1200]         # ventana de hueso (nivel/ancho se justifican en el EDA)
+  umbral_hueso_hu: 200             # para el MIP del visualizador 1
+  frac_cortes_sin_hueso: 0.10      # % de cortes de fondo que se mantienen en entrenamiento
+  split: [0.70, 0.15, 0.15]        # train / val / test, POR PACIENTE (nunca por corte)
+  num_workers: 0                   # Windows con poca VRAM: 0 (recomendacion del curso)
+
+aumentos:
+  activar: true
+  prob_degradacion: 0.5            # robustez a imagenes de baja calidad (pedido del profesor)
+  ruido_sigma: [0.0, 0.08]
+  blur_sigma: [0.0, 1.5]
+  factor_submuestreo: [1.0, 3.0]
+  gamma: [0.7, 1.5]
+  rotacion_grados: 10
+  flip_horizontal: false           # OJO: voltear intercambia coxal izq/der -> se hace con swap de etiquetas
+
+modelo:
+  canales: [32, 64, 128, 256, 512] # FundidoraPC extendida: 5 bloques
+  convs_por_bloque: 1              # 1 = compatible con los pesos de la FundidoraPC de clase
+  cbam_en_bloques: [4, 5]          # CBAM antes de bifurcar hacia las cabezas
+  cbam_reduccion: 16
+  canales_decoder: [256, 128, 64, 32, 32]
+  pesos_backbone: null             # ruta .pth de una FundidoraPC entrenada (transfer learning)
+
+deteccion:
+  stride: 16                       # grid de 16x16 celdas con entrada 256
+  radio_centro: 2.5                # center sampling (celdas) para asignar positivos
+  umbral_score: 0.30
+  umbral_nms: 0.50
+  max_det_por_clase: 1             # taxonomia: 1 caja por region por corte
+
+perdida:
+  # lambdas: se calibran con scripts/calibrar_lambdas.py y se justifican en el informe
+  lambda_cls: 1.0
+  lambda_det_obj: 1.0
+  lambda_det_box: 2.0
+  lambda_sem: 1.0
+  lambda_rol: 1.0
+  lambda_borde: 0.5
+  lambda_dist: 0.5
+  focal_gamma: 2.0
+  focal_alpha: 0.25
+  borde_pos_weight: 10.0
+  huber_delta: 0.5                 # sobre log(1+d_mm)
+
+entrenamiento:
+  batch_size: 8
+  acumulacion: 2                   # batch efectivo = batch_size * acumulacion
+  amp: true                        # enunciado: precision mixta obligatoria
+  lr: 0.001
+  weight_decay: 0.0001
+  clip_grad: 5.0
+  fast_dev_run: false              # true = 2 batches por fase, para depurar en segundos
+  metrica_mejor: val_score         # se guarda el mejor checkpoint por validacion, no el ultimo
+  # curriculum: cada etapa activa cabezas y define si el backbone se congela
+  etapas:
+    - nombre: deteccion
+      cabezas: [cls, det]
+      epocas: 15
+      congelar_backbone: false
+    - nombre: segmentacion
+      cabezas: [cls, det, seg]
+      epocas: 20
+      congelar_backbone: false
+    - nombre: distancia
+      cabezas: [cls, det, seg, dist]
+      epocas: 10
+      congelar_backbone: true
+    - nombre: conjunto
+      cabezas: [cls, det, seg, dist]
+      epocas: 10
+      congelar_backbone: false
+      lr_factor: 0.1
+
+postproceso:
+  filtrar_con_clasificador: true   # la cabeza de clasificacion apaga regiones que "no estan" en el corte
+  min_voxeles_fragmento: 200
+  max_fragmentos_por_region: 10
+  percentil_distancia: 0           # 0 = minimo exacto (borde a borde); 2-5 = mas robusto a ruido

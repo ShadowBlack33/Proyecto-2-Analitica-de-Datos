@@ -1,5 +1,5 @@
 # Datos (pesan GB, nunca se versionan)
-data/
+/data/
 *.mha
 *.nii
 *.nii.gz
@@ -27,6 +27,7 @@ venv/
 Thumbs.db
 
 # Logs de entrenamiento
-runs/
+/runs/
+/resultados/
 wandb/
 *.log
