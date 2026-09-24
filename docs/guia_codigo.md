@@ -8,6 +8,7 @@ Todo lo que se diga en la sustentación debe poder señalarse en uno de estos ar
 
 | Semana | Comando | Qué produce |
 |---|---|---|
+| 8 | `python scripts/organizar_datos.py --zips ..` | `data/raw/images` y `data/raw/labels` a partir de los 3 zip de Zenodo |
 | 8 | `python scripts/preparar_datos.py` | caché de cortes 256×256 + `data/splits.json` (por paciente, con SHA-256) |
 | 8 | `python scripts/eda.py` | `resultados/eda/*.csv` + gráficas: spacing, fragmentos por región, distancias GT, calidad |
 | 8 | `streamlit run src/dashboard/app.py` (pestaña 1) | visualizador 1 (MIP raw) — no necesita modelo |

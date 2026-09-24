@@ -85,6 +85,7 @@ data/raw/labels/   001.mha ... 150.mha
 ```
 
 ```bash
+python scripts/organizar_datos.py --zips ..   # descomprime los 3 zip en data/raw (aplana y empareja)
 python scripts/preparar_datos.py      # cache de cortes + splits por paciente (una sola vez)
 python scripts/eda.py                 # EDA semana 8
 ```
