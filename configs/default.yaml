@@ -8,7 +8,7 @@ seed: 42
 rutas:
   imagenes: data/raw/images        # donde quedan los .mha de part1 + part2 juntos
   etiquetas: data/raw/labels       # donde quedan los .mha de PENGWIN_CT_train_labels
-  cache: data/cache                # cortes preprocesados (.npz por caso)
+  cache: data/cache                # cortes preprocesados (.npy por caso, leidos con mmap)
   splits: data/splits.json
   checkpoints: checkpoints
   resultados: resultados
@@ -16,8 +16,8 @@ rutas:
 datos:
   resolucion: 256                  # enunciado: 224-256 px por corte
   contexto: 1                      # 2.5D: cortes vecinos a cada lado -> 2*1+1 = 3 canales
-  ventana_hu: [-200, 1200]         # ventana de hueso (nivel/ancho se justifican en el EDA)
-  umbral_hueso_hu: 200             # para el MIP del visualizador 1
+  ventana_hu: [-200, 1200]         # EDA: cubre el hueso completo (p1 -4 HU, p99 1154 HU)
+  umbral_hueso_hu: 200             # para el MIP del visualizador 1 (muestra la corteza)
   frac_cortes_sin_hueso: 0.10      # % de cortes de fondo que se mantienen en entrenamiento
   split: [0.70, 0.15, 0.15]        # train / val / test, POR PACIENTE (nunca por corte)
   num_workers: 0                   # Windows con poca VRAM: 0 (recomendacion del curso)
@@ -48,22 +48,23 @@ deteccion:
   max_det_por_clase: 1             # taxonomia: 1 caja por region por corte
 
 perdida:
-  # lambdas: se calibran con scripts/calibrar_lambdas.py y se justifican en el informe
-  lambda_cls: 1.0
-  lambda_det_obj: 1.0
-  lambda_det_box: 2.0
-  lambda_sem: 1.0
-  lambda_rol: 1.0
-  lambda_borde: 0.5
-  lambda_dist: 0.5
+  # lambdas calibrados con scripts/calibrar_lambdas.py (balance de normas de gradiente
+  # sobre el backbone compartido, referencia lambda_sem = 1), redondeados:
+  lambda_cls: 0.5                  # sugerido 0.38: su gradiente es 2.6x el de la referencia
+  lambda_det_obj: 3.0              # sugerido 3.09
+  lambda_det_box: 5.0              # sugerido 5.96: gradiente ~6x menor, mismo caso que la Semana 6
+  lambda_sem: 1.0                  # referencia
+  lambda_rol: 1.0                  # sugerido 0.88
+  lambda_borde: 2.0                # sugerido 1.97; EDA: la mayoria de fragmentos estan en contacto
+  lambda_dist: 0.5                 # sugerido 0.62
   focal_gamma: 2.0
   focal_alpha: 0.25
   borde_pos_weight: 10.0
   huber_delta: 0.5                 # sobre log(1+d_mm)
 
 entrenamiento:
-  batch_size: 8
-  acumulacion: 2                   # batch efectivo = batch_size * acumulacion
+  batch_size: 16                   # perfil de memoria: 2.07 GB pico a 256 px, cabe en 4 GB
+  acumulacion: 1                   # batch efectivo = batch_size * acumulacion
   amp: true                        # enunciado: precision mixta obligatoria
   lr: 0.001
   weight_decay: 0.0001
