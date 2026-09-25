@@ -90,6 +90,11 @@ def main():
             except ValueError:
                 pass
         mejor = -float("inf")
+        previo = dir_ck / f"mejor_{etapa['nombre']}.pth"
+        if ck is not None and ie == inicio_etapa and previo.exists():
+            # al reanudar a mitad de etapa, se conserva el mejor puntaje ya alcanzado
+            mejor = torch.load(previo, map_location="cpu", weights_only=False)["metricas"]["val_score"]
+            print(f"[reanudar] mejor val_score previo de la etapa: {mejor:.4f}")
         print(f"\n=== etapa {etapa['nombre']} | cabezas {cabezas} | backbone "
               f"{'congelado' if etapa.get('congelar_backbone') else 'entrenable'} | lr {lr}")
         for ep in range(inicio_epoca if ie == inicio_etapa else 0, etapa["epocas"]):

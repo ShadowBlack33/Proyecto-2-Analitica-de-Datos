@@ -135,3 +135,48 @@ def test_metricas_clasificacion_igual_a_sklearn():
     assert (matriz_confusion(a, b, 4) == confusion_matrix(a, b, labels=[0, 1, 2, 3])).all()
     # caso borde: clase sin positivos ni predichos -> F1 0, como zero_division=0
     assert f1_por_clase(np.zeros((5, 1)), np.zeros((5, 1)))[0] == 0.0
+
+
+def test_config_hereda_y_difiere_en_un_factor():
+    from src.utils import cargar_config
+    base = cargar_config("configs/default.yaml")
+    sin_cbam = cargar_config("configs/ablacion_sin_cbam.yaml")
+    con_tl = cargar_config("configs/ablacion_con_tl.yaml")
+    assert sin_cbam["modelo"]["cbam_en_bloques"] == [] and con_tl["modelo"]["pesos_backbone"]
+    for cfg, clave in ((sin_cbam, "cbam_en_bloques"), (con_tl, "pesos_backbone")):
+        a, b = dict(base), dict(cfg)
+        a["modelo"] = {k: v for k, v in base["modelo"].items() if k != clave}
+        b["modelo"] = {k: v for k, v in cfg["modelo"].items() if k != clave}
+        assert a == b, "la ablacion debe cambiar un solo factor"
+
+
+def test_transfer_desde_detector_con_bias(tmp_path):
+    """Pesos de un detector tipo Taller 3 (convs con bias): se copian los 4 bloques y la
+    salida del bloque 1 es identica a la original (el bias se absorbe en el BatchNorm)."""
+    import torch.nn as nn
+    from src.models.fundidora import cargar_pesos_parciales
+    from src.models.modelo import PengwinNet
+    from src.utils import cargar_config
+
+    def blk(ci, co):
+        return nn.Sequential(nn.Conv2d(ci, co, 3, padding=1, bias=True), nn.BatchNorm2d(co), nn.ReLU(), nn.MaxPool2d(2))
+
+    class Det(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.backbone = nn.Sequential(blk(3, 32), blk(32, 64), blk(64, 128), blk(128, 256))
+            self.rpn = nn.Conv2d(256, 256, 3, padding=1)
+
+    torch.manual_seed(0)
+    det = Det()
+    for m in det.backbone.modules():
+        if isinstance(m, nn.BatchNorm2d):
+            m.running_mean.normal_(); m.running_var.uniform_(0.5, 2)
+    ruta = tmp_path / "t3.pt"
+    torch.save({"model_state_dict": det.state_dict(), "epoch": 19}, ruta)
+    modelo = PengwinNet(cargar_config("configs/default.yaml")["modelo"], in_ch=3)
+    assert cargar_pesos_parciales(modelo.backbone, str(ruta), verbose=False) == 4
+    det.eval(); modelo.eval()
+    x = torch.randn(2, 3, 32, 32)
+    with torch.no_grad():
+        assert torch.allclose(modelo.backbone.bloques[0](x), det.backbone[0][:3](x), atol=1e-5)

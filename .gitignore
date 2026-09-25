@@ -1,34 +1,59 @@
-# Datos (pesan GB, nunca se versionan)
+# ============================================================
+# PENGWIN — archivos que nunca se suben a GitHub
+# ============================================================
+
+# ---------- Datos (pesan GB) ----------
 /data/
 *.mha
+*.mhd
+*.raw
 *.nii
 *.nii.gz
 *.zip
 
-# Pesos entrenados
-checkpoints/*.pth
-checkpoints/*.pt
+# ---------- Pesos de modelos (se comparten por Drive / GitHub Releases) ----------
+checkpoints/**
 !checkpoints/.gitkeep
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
 
-# Python
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-venv/
-.venv/
-*.egg-info/
-
-# Entornos / secretos
-.env
-*.token
-
-# Sistema
-.DS_Store
-Thumbs.db
-
-# Logs de entrenamiento
-/runs/
+# ---------- Salidas generadas al correr ----------
 /resultados/
+/runs/
 wandb/
 *.log
+configs/notebook.yaml
+
+# ---------- Entornos virtuales ----------
 avenv/
+.venv/
+venv/
+env/
+ev/
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.ipynb_checkpoints/
+
+# ---------- Secretos y credenciales ----------
+.env
+*.token
+kaggle.json
+.streamlit/secrets.toml
+
+# ---------- Editor y sistema ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*

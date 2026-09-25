@@ -1,0 +1,7 @@
+# Ablacion: el modelo principal SIN el bloque de atencion CBAM.
+# Todo lo demas es identico a default.yaml, para que la diferencia se deba solo a CBAM.
+#   python scripts/train.py --config configs/ablacion_sin_cbam.yaml --nombre sin_cbam
+hereda: default.yaml
+
+modelo:
+  cbam_en_bloques: []

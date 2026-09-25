@@ -23,9 +23,23 @@ def fijar_semilla(seed: int = 42) -> None:
     torch.backends.cudnn.deterministic = True
 
 
+def _fusionar(base: dict, cambios: dict) -> dict:
+    out = dict(base)
+    for k, v in cambios.items():
+        out[k] = _fusionar(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def cargar_config(ruta: str | Path = "configs/default.yaml") -> dict:
+    """Lee un YAML. Si trae `hereda: otro.yaml`, parte de ese archivo y solo aplica los
+    cambios: asi cada ablacion difiere de la configuracion principal en un solo factor."""
+    ruta = Path(ruta)
     with open(ruta, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f) or {}
+    base = cfg.pop("hereda", None)
+    if base:
+        cfg = _fusionar(cargar_config(ruta.parent / base), cfg)
+    return cfg
 
 
 def dispositivo(preferido: str | None = None) -> torch.device:

@@ -1,0 +1,9 @@
+# Ablacion: el modelo principal CON transfer learning en el backbone.
+# El backbone arranca desde la FundidoraPC entrenada en el Taller 3 (Face Mask Detection),
+# unico lugar donde el enunciado permite transfer learning. Las cabezas siguen desde cero.
+# El modelo principal (default.yaml) es la version SIN transfer learning.
+#   python scripts/train.py --config configs/ablacion_con_tl.yaml --nombre con_tl
+hereda: default.yaml
+
+modelo:
+  pesos_backbone: checkpoints/checkpoint_taller3.pt

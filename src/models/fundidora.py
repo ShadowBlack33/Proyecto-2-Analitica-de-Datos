@@ -63,41 +63,70 @@ class FundidoraPCExtendida(nn.Module):
         return pooled, feats[-1]
 
 
+def _unidades_conv_bn(sd: dict) -> list[dict]:
+    """Agrupa un state_dict en unidades conv (+bias opcional) -> BatchNorm, en orden."""
+    claves = list(sd)
+    unidades = []
+    for i, k in enumerate(claves):
+        if not (k.endswith("weight") and sd[k].ndim == 4):
+            continue
+        pref = k[: -len("weight")]
+        bn = next((c[: -len("running_mean")] for c in claves[i + 1:] if c.endswith("running_mean")), None)
+        if bn is None:
+            break
+        unidades.append({"w": k, "b": pref + "bias" if pref + "bias" in sd else None, "bn": bn})
+    return unidades
+
+
 def cargar_pesos_parciales(modelo: nn.Module, ruta: str, verbose=True) -> int:
     """Transfer learning en el backbone (unico lugar donde el enunciado lo permite).
 
-    Copia, EN ORDEN, los pesos de conv/BN de una FundidoraPC entrenada antes en el curso
-    (Intel Images, Face Mask, etc.) a los bloques equivalentes de la extendida. Se empareja
-    por orden y forma, no por nombre, porque cada notebook nombro las capas distinto.
-    Si la primera conv se entreno con 1 canal (FashionMNIST) se replica a 3 canales.
-    Devuelve cuantos tensores se copiaron (reportarlo en el model card).
+    Copia los pesos de una FundidoraPC entrenada antes en el curso (p. ej. el backbone del
+    Taller 3) a los bloques equivalentes de la extendida. Empareja por capa y en orden
+    (conv con conv, BatchNorm con BatchNorm), no por nombre, porque cada notebook nombro
+    las capas distinto. Detalles:
+    - Si viene de un detector completo, usa solo las capas cuyo nombre contiene "backbone".
+    - Si la conv de origen tiene bias y la nuestra no (va seguida de BatchNorm), el bias se
+      absorbe en la media del BatchNorm: BN(x + b) con media m == BN(x) con media m - b.
+    - Si la primera conv se entreno con 1 canal, se replica a los canales de entrada.
+    - Se detiene donde la arquitectura diverge (el 5.o bloque es nuevo y arranca de cero).
+    Devuelve cuantos bloques conv+BN se copiaron (reportarlo en el model card).
     """
-    fuente = torch.load(ruta, map_location="cpu")
-    if isinstance(fuente, dict) and "modelo" in fuente:
-        fuente = fuente["modelo"]
+    fuente = torch.load(ruta, map_location="cpu", weights_only=False)
+    for clave in ("modelo", "model_state_dict", "state_dict", "model"):
+        if isinstance(fuente, dict) and isinstance(fuente.get(clave), (dict, nn.Module)):
+            fuente = fuente[clave]
+            break
     if isinstance(fuente, nn.Module):
         fuente = fuente.state_dict()
-
-    def claves_conv_bn(sd):
-        return [k for k, v in sd.items()
-                if any(t in k for t in ("weight", "bias", "running_mean", "running_var"))
-                and "cbam" not in k and "fc" not in k and "head" not in k and "cabeza" not in k
-                and v.ndim in (1, 4)]
+    fuente = {k: v for k, v in fuente.items() if torch.is_tensor(v)}
+    del_backbone = {k: v for k, v in fuente.items() if "backbone" in k}
+    if del_backbone:
+        fuente = del_backbone
 
     destino = modelo.state_dict()
-    k_src, k_dst = claves_conv_bn(fuente), [k for k in claves_conv_bn(destino) if k.startswith("bloques")]
+    u_src = _unidades_conv_bn(fuente)
+    u_dst = _unidades_conv_bn({k: v for k, v in destino.items() if k.startswith("bloques")})
     copiados = 0
-    for ks, kd in zip(k_src, k_dst):
-        ws, wd = fuente[ks], destino[kd]
-        if ws.shape == wd.shape:
-            destino[kd] = ws.clone()
-            copiados += 1
-        elif ws.ndim == 4 and ws.shape[0] == wd.shape[0] and ws.shape[2:] == wd.shape[2:]:
-            destino[kd] = ws.mean(1, keepdim=True).repeat(1, wd.shape[1], 1, 1)  # 1 -> 3 canales
-            copiados += 1
-        else:
-            break  # a partir de aqui la arquitectura diverge (bloque 5 nuevo)
+    for us, ud in zip(u_src, u_dst):
+        ws, wd = fuente[us["w"]], destino[ud["w"]]
+        if ws.shape[0] != wd.shape[0] or ws.shape[2:] != wd.shape[2:]:
+            break
+        if ws.shape[1] != wd.shape[1]:
+            if copiados > 0:
+                break
+            ws = ws.mean(1, keepdim=True).repeat(1, wd.shape[1], 1, 1)
+        destino[ud["w"]] = ws.clone()
+        for t in ("weight", "bias", "running_var"):
+            destino[ud["bn"] + t] = fuente[us["bn"] + t].clone()
+        media = fuente[us["bn"] + "running_mean"].clone()
+        if us["b"] is not None and ud["b"] is None:
+            media = media - fuente[us["b"]]
+        destino[ud["bn"] + "running_mean"] = media
+        copiados += 1
     modelo.load_state_dict(destino)
     if verbose:
-        print(f"[transfer] {copiados} tensores copiados desde {ruta}")
+        print(f"[transfer] {copiados} de {len(u_dst)} bloques conv+BN copiados desde {ruta}")
+    if copiados == 0:
+        raise RuntimeError(f"No se pudo copiar ningun bloque desde {ruta}: revisar la arquitectura del checkpoint")
     return copiados
