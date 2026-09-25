@@ -13,3 +13,5 @@ streamlit>=1.50    # width="stretch" en graficas (use_container_width esta obsol
 medpy              # opcional: verificacion cruzada de HD95/ASSD
 # segment-anything: solo para el baseline (ver scripts/baseline_sam.py)
 #   pip install git+https://github.com/facebookresearch/segment-anything.git
+nbformat
+ipykernel
