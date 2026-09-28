@@ -37,7 +37,9 @@ src/
 notebooks/         EDA y experimentos exploratorios
 scripts/           entrenamiento, evaluacion, despliegue
 checkpoints/        pesos entrenados (.pth) — no versionados, ver .gitignore
-docs/               model card, plan del proyecto, bitacora de decisiones
+docs/               guia del codigo, model card, bitacora de decisiones
+configs/            default.yaml (unica fuente de parametros)
+tests/              casos de control (NMS vs torchvision, IoU, taxonomia, post-proceso)
 ```
 
 ```mermaid
@@ -72,21 +74,52 @@ pip install -r requirements.txt
 
 > PC con menos de 6GB de VRAM: `torch.cuda.amp` ya viene activado por defecto en `scripts/train.py`. Si aun asi no alcanza, bajar el batch o activar gradient accumulation (ver `configs/`).
 
-### 2. Entrenamiento
+### 2. Datos
 
-```bash
-python scripts/train.py --config configs/default.yaml
+Descargar de [Zenodo](https://doi.org/10.5281/zenodo.10927452) los 3 zip y descomprimir asi
+(las imagenes de `part1` y `part2` van en la MISMA carpeta):
+
+```
+data/raw/images/   001.mha ... 150.mha
+data/raw/labels/   001.mha ... 150.mha
 ```
 
-Semillas fijas, curriculum por etapas (deteccion → segmentacion → regresion de distancia → fine-tuning conjunto) — comandos exactos de cada etapa en `scripts/`.
-
-### 3. Dashboard
-
 ```bash
-python src/dashboard/app.py
+python scripts/organizar_datos.py --zips ..   # descomprime los 3 zip en data/raw (aplana y empareja)
+python scripts/preparar_datos.py      # cache de cortes + splits por paciente (una sola vez)
+python scripts/eda.py                 # EDA semana 8
 ```
 
-Se expone localmente y, para la demo en vivo, via tunel de Cloudflare (ver `docs/`).
+> Sin datos todavia: `python scripts/generar_datos_sinteticos.py` crea CT falsos con la misma
+> estructura para probar todo el pipeline (ver `docs/guia_codigo.md`).
+
+### 3. Entrenamiento
+
+```bash
+python scripts/perfil_memoria.py                      # VRAM real antes de fijar el batch
+python scripts/overfit_test.py --cabezas cls det      # prueba de correctitud (semana 9)
+python scripts/calibrar_lambdas.py                    # lambdas justificados
+python scripts/train.py --nombre completo             # curriculum de 4 etapas
+```
+
+Curriculum: deteccion → +segmentacion → +distancia (backbone congelado) → ajuste conjunto.
+Cada etapa guarda el mejor checkpoint por validacion en `checkpoints/<nombre>/`.
+
+### 4. Evaluacion
+
+```bash
+python scripts/evaluar.py --ckpt checkpoints/completo/mejor_conjunto.pth --degradacion 0 1 2 3
+python scripts/evaluar.py --ckpt checkpoints/completo/mejor_conjunto.pth --device cpu
+python scripts/baseline_sam.py --ckpt checkpoints/completo/mejor_conjunto.pth --sam checkpoints/sam_vit_b_01ec64.pth
+python -m pytest tests -q
+```
+
+### 5. Dashboard
+
+```bash
+streamlit run src/dashboard/app.py
+cloudflared tunnel --url http://localhost:8501     # demo en vivo (otra terminal)
+```
 
 ---
 
@@ -106,17 +139,24 @@ La distancia de separacion se muestra directamente en los visualizadores 2 y 3 �
 
 ### `configs/default.yaml`
 
+Todo parametro ajustable vive ahi (nada quemado en el codigo). Extracto:
+
 ```yaml
-resolution: 256
-batch_size: 8
-amp: true
-grid_size: 16
-lambda_cls: 1.0
-lambda_box: 5.0
-lambda_seg: 1.0
-lambda_dist: 1.0
-seed: 42
-voxel_spacing_source: "nifti_header"
+datos:
+  resolucion: 256          # enunciado: 224-256 px
+  contexto: 1              # 2.5D -> 3 cortes vecinos como canales
+  ventana_hu: [-200, 1200]
+modelo:
+  canales: [32, 64, 128, 256, 512]   # FundidoraPC extendida
+  cbam_en_bloques: [4, 5]
+deteccion:
+  stride: 16               # grid 16x16
+perdida:
+  lambda_det_box: 2.0      # calibrados con scripts/calibrar_lambdas.py
+entrenamiento:
+  batch_size: 8
+  acumulacion: 2
+  amp: true
 ```
 
 ---
