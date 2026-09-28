@@ -38,9 +38,14 @@ def _a_nativo_por_bloques(vol256: np.ndarray, info: dict, modo: str, dtype, bloq
     return np.concatenate(partes, 0)
 
 
+def rol_con_umbral(psec: np.ndarray, umbral: float) -> np.ndarray:
+    """Rol 1 (principal) / 2 (secundario) segun P(secundario | hueso) >= umbral."""
+    return np.where(psec >= umbral, 2, 1).astype(np.uint8)
+
+
 @torch.no_grad()
 def inferir_volumen(modelo: PengwinNet, hu: np.ndarray, spacing, cfg: dict, device,
-                    batch=8, amp=True, img01_256: np.ndarray | None = None) -> dict:
+                    batch=8, amp=True, img01_256: np.ndarray | None = None, devolver_mapas=False) -> dict:
     t0 = time.perf_counter()
     tam, ctx = cfg["datos"]["resolucion"], cfg["datos"]["contexto"]
     Z, H, W = hu.shape
@@ -54,6 +59,7 @@ def inferir_volumen(modelo: PengwinNet, hu: np.ndarray, spacing, cfg: dict, devi
     cls_p = np.zeros((Z, 6), np.float32)
     sem = np.zeros((Z, tam, tam), np.uint8)
     rol = np.zeros((Z, tam, tam), np.uint8)
+    psec = np.zeros((Z, tam, tam), np.float16)
     borde = np.zeros((Z, tam, tam), np.float16)
     dist = np.zeros((Z, tam, tam), np.float16)
     dets_256 = []
@@ -68,6 +74,8 @@ def inferir_volumen(modelo: PengwinNet, hu: np.ndarray, spacing, cfg: dict, devi
         cls_p[z0:z0 + len(zs)] = o["cls"].float().sigmoid().cpu().numpy()
         sem[z0:z0 + len(zs)] = o["sem"].argmax(1).cpu().numpy()
         rol[z0:z0 + len(zs)] = o["rol"].argmax(1).cpu().numpy()
+        p_rol = o["rol"].float().softmax(1)
+        psec[z0:z0 + len(zs)] = (p_rol[:, 2] / (p_rol[:, 1] + p_rol[:, 2] + 1e-6)).cpu().numpy()
         borde[z0:z0 + len(zs)] = o["borde"][:, 0].float().sigmoid().cpu().numpy()
         dist[z0:z0 + len(zs)] = o["dist"][:, 0].float().cpu().numpy()
         dets_256 += detecciones(o["det_cls"], o["det_box"], dc["stride"], dc["umbral_score"],
@@ -94,12 +102,21 @@ def inferir_volumen(modelo: PengwinNet, hu: np.ndarray, spacing, cfg: dict, devi
     borde_n = _a_nativo_por_bloques(borde.astype(np.float32), info, "bilinear", np.float16)
     dist_n = _a_nativo_por_bloques(dist.astype(np.float32), info, "bilinear", np.float16)
     pp = cfg["postproceso"]
+    psec_n = None
+    if pp.get("umbral_secundario") is not None or devolver_mapas:
+        psec_n = _a_nativo_por_bloques(psec.astype(np.float32), info, "bilinear", np.float16)
+    if pp.get("umbral_secundario") is not None:
+        rol_n = rol_con_umbral(psec_n, pp["umbral_secundario"])
     etq = volumen_etiquetas(sem_n, rol_n, borde_n.astype(np.float32), spacing,
-                            pp["min_voxeles_fragmento"], pp["max_fragmentos_por_region"])
+                            pp["min_voxeles_fragmento"], pp["max_fragmentos_por_region"],
+                            pp.get("usar_borde", True), pp.get("erosion_nucleo", 1),
+                            pp.get("modo_instancias", "rol"))
     tabla = tabla_fragmentos(etq, spacing, dist_n.astype(np.float32), pp["percentil_distancia"])
     t_post = time.perf_counter() - t2
 
+    extra = {"mapas": {"sem": sem_n, "rol": rol_n, "psec": psec_n, "borde": borde_n}} if devolver_mapas else {}
     return {
+        **extra,
         "etiquetas": etq, "detecciones": dets, "cls_prob": cls_p, "tabla": tabla,
         "borde": borde_n, "spacing": spacing,
         "latencia": {"dispositivo": device.type, "preproceso_s": t_pre, "modelo_s": t_modelo,

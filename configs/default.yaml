@@ -20,7 +20,7 @@ datos:
   umbral_hueso_hu: 200             # para el MIP del visualizador 1 (muestra la corteza)
   frac_cortes_sin_hueso: 0.10      # % de cortes de fondo que se mantienen en entrenamiento
   split: [0.70, 0.15, 0.15]        # train / val / test, POR PACIENTE (nunca por corte)
-  num_workers: 0                   # Windows con poca VRAM: 0 (recomendacion del curso)
+  num_workers: 4                   # Windows con poca VRAM: 0 (recomendacion del curso)
 
 aumentos:
   activar: true

@@ -1,0 +1,69 @@
+{
+ "split": "val",
+ "casos": [
+  "008",
+  "014",
+  "016",
+  "025",
+  "044",
+  "053",
+  "058",
+  "061",
+  "062",
+  "079",
+  "087",
+  "089",
+  "093",
+  "097",
+  "099"
+ ],
+ "actual": {
+  "dice_fragmento": 0.6968993256462833,
+  "dice_principal": 0.9112964563833753,
+  "dice_secundario": 0.4825021949091913,
+  "secundarios_detectados": 0.8222222222222222
+ },
+ "categorias": [
+  {
+   "categoria": "absorbido",
+   "fragmentos": 17,
+   "volumen_ml_mediana": 34.91283416748047,
+   "dice_medio": 0.11352340634612068,
+   "porcentaje": 0.37777777777777777
+  },
+  {
+   "categoria": "correcto",
+   "fragmentos": 26,
+   "volumen_ml_mediana": 18.86260986328125,
+   "dice_medio": 0.7609363500655301,
+   "porcentaje": 0.5777777777777777
+  },
+  {
+   "categoria": "fusionado",
+   "fragmentos": 1,
+   "volumen_ml_mediana": 2.4385914001464846,
+   "dice_medio": 0.1629507423992458,
+   "porcentaje": 0.022222222222222223
+  },
+  {
+   "categoria": "perdido",
+   "fragmentos": 1,
+   "volumen_ml_mediana": 5.02140474319458,
+   "dice_medio": 0.0,
+   "porcentaje": 0.022222222222222223
+  }
+ ],
+ "union_rol_crudo": 0.5270620424936279,
+ "union_post": 0.5343439704304535,
+ "barrido_mejor": {
+  "modo": "rol",
+  "umbral_secundario": 0.3,
+  "min_voxeles": 100,
+  "usar_borde": true,
+  "erosion": 1,
+  "dice_fragmento": 0.6982559797194452,
+  "dice_principal": 0.9113508528969143,
+  "dice_secundario": 0.48516110654197575,
+  "secundarios_detectados": 0.8444444444444444
+ }
+}
