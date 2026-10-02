@@ -50,8 +50,8 @@ def main():
     g = torch.Generator().manual_seed(cfg["seed"])
     nw = cfg["datos"]["num_workers"]
     dl_tr = DataLoader(ds_tr, E["batch_size"], shuffle=True, num_workers=nw, drop_last=True, generator=g,
-                       pin_memory=dev.type == "cuda")
-    dl_va = DataLoader(ds_va, E["batch_size"], shuffle=False, num_workers=nw)
+                       pin_memory=dev.type == "cuda", persistent_workers=nw > 0)
+    dl_va = DataLoader(ds_va, E["batch_size"], shuffle=False, num_workers=nw, persistent_workers=nw > 0)
     print(f"[datos] train {len(ds_tr)} cortes de {len(splits['train'])} casos | val {len(ds_va)} cortes")
 
     modelo = PengwinNet(cfg["modelo"], in_ch=2 * cfg["datos"]["contexto"] + 1).to(dev)

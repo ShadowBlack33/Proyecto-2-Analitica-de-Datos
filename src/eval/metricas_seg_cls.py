@@ -18,9 +18,9 @@ def _media_nan(v):
     v = np.asarray(v, dtype=float)
     return float(np.nanmean(v)) if np.isfinite(v).any() else float("nan")
 from scipy import ndimage as ndi
-from scipy.optimize import linear_sum_assignment
 
 from ..data.etiquetas import nombre_fragmento, region_de_etiqueta
+from .asignacion import asignacion_optima
 
 
 # ============================================================ clasificacion
@@ -139,7 +139,7 @@ def metricas_fragmentos(etq_gt: np.ndarray, etq_pred: np.ndarray, spacing, super
             mg = etq_gt == g
             for j, p in enumerate(p_ids):
                 iou[i, j] = dice_iou(mg, etq_pred == p)[1]
-        fil, col = linear_sum_assignment(-iou)
+        fil, col = asignacion_optima(-iou)
         pareja = {g_ids[i]: p_ids[j] for i, j in zip(fil, col) if p_ids and iou[i, j] > 0}
         for g in g_ids:
             fila = {"gt": nombre_fragmento(g), "pred": None, "dice": 0.0, "iou": 0.0,

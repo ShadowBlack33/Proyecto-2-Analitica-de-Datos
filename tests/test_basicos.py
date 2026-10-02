@@ -180,3 +180,50 @@ def test_transfer_desde_detector_con_bias(tmp_path):
     x = torch.randn(2, 3, 32, 32)
     with torch.no_grad():
         assert torch.allclose(modelo.backbone.bloques[0](x), det.backbone[0][:3](x), atol=1e-5)
+
+
+def test_asignacion_optima_casos_conocidos():
+    from src.eval.asignacion import asignacion_optima
+
+    f, c = asignacion_optima([[4, 1, 3], [2, 0, 5], [3, 2, 2]])        # optimo: 1 + 2 + 2 = 5
+    assert sorted(zip(f.tolist(), c.tolist())) == [(0, 1), (1, 0), (2, 2)]
+    f, c = asignacion_optima(-np.array([[0.9, 0.0], [0.0, 0.8], [0.1, 0.1]]))   # rectangular: 3 filas, 2 columnas
+    assert sorted(zip(f.tolist(), c.tolist())) == [(0, 0), (1, 1)]
+    f, c = asignacion_optima(-np.array([[0.2, 0.7, 0.1]]))              # 1 fila, 3 columnas
+    assert (f.tolist(), c.tolist()) == ([0], [1])
+    f, c = asignacion_optima(np.zeros((0, 3)))
+    assert len(f) == 0 and len(c) == 0
+
+
+def test_asignacion_optima_igual_a_scipy():
+    """Mismo costo total que scipy en matrices aleatorias, cuadradas y rectangulares."""
+    import pytest
+    try:
+        from scipy.optimize import linear_sum_assignment
+    except Exception:
+        pytest.skip("scipy.optimize no disponible (p. ej. bloqueado por Application Control)")
+    from src.eval.asignacion import asignacion_optima
+
+    rng = np.random.default_rng(1)
+    for _ in range(200):
+        n, m = rng.integers(1, 11, size=2)
+        c = rng.random((n, m)).round(2)                                 # redondeo: hay empates
+        f, g = asignacion_optima(c)
+        fs, gs = linear_sum_assignment(c)
+        assert len(f) == len(fs) == min(n, m) and len(set(g.tolist())) == len(g)
+        assert abs(c[f, g].sum() - c[fs, gs].sum()) < 1e-9
+
+
+def test_gamma_batchnorm_detecta_canales_apagados():
+    from src.analisis import gammas_batchnorm
+    from src.models.modelo import PengwinNet
+    from src.utils import cargar_config
+
+    modelo = PengwinNet(cargar_config("configs/default.yaml")["modelo"], in_ch=3)
+    estado = {k: v.clone() for k, v in modelo.state_dict().items()}
+    estado["backbone.bloques.1.1.weight"][:16] = 0.0                  # 16 de 64 canales del bloque 2
+    df, crudos = gammas_batchnorm(estado)
+    fila = df.set_index("capa").loc["Backbone · bloque 2"]
+    assert fila["canales"] == 64 and abs(fila["pct_apagados"] - 25.0) < 1e-9
+    assert df.set_index("capa").loc["Backbone · bloque 1", "pct_apagados"] == 0.0
+    assert len([c for c in crudos if c.startswith("Backbone")]) == 5

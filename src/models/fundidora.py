@@ -93,7 +93,7 @@ def cargar_pesos_parciales(modelo: nn.Module, ruta: str, verbose=True) -> int:
     Devuelve cuantos bloques conv+BN se copiaron (reportarlo en el model card).
     """
     fuente = torch.load(ruta, map_location="cpu", weights_only=False)
-    for clave in ("modelo", "model_state_dict", "state_dict", "model"):
+    for clave in ("backbone", "modelo", "model_state_dict", "state_dict", "model"):
         if isinstance(fuente, dict) and isinstance(fuente.get(clave), (dict, nn.Module)):
             fuente = fuente[clave]
             break

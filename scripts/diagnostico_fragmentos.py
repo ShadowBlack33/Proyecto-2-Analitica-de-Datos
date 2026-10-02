@@ -34,13 +34,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import linear_sum_assignment
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.data.etiquetas import indice_en_region, region_de_etiqueta  # noqa: E402
 from src.data.io import leer_volumen, listar_casos  # noqa: E402
 from src.data.splits import cargar_splits  # noqa: E402
+from src.eval.asignacion import asignacion_optima  # noqa: E402
 from src.inferencia import cargar_modelo, inferir_volumen, rol_con_umbral  # noqa: E402
 from src.postprocess.instancias import volumen_etiquetas  # noqa: E402
 from src.utils import cargar_config, dispositivo, fijar_semilla  # noqa: E402
@@ -102,7 +102,7 @@ def dice_fragmentos(gt, etq):
             mg = gt == g
             for j, p in enumerate(p_ids):
                 mat[i, j] = dice(mg, etq == p)
-        fil, col = linear_sum_assignment(-mat)
+        fil, col = asignacion_optima(-mat)
         par = {g_ids[i]: mat[i, j] for i, j in zip(fil, col) if p_ids and mat[i, j] > 0}
         for g in g_ids:
             filas.append({"gt": int(g), "principal": indice_en_region(g) == 1, "dice": float(par.get(g, 0.0)),

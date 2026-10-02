@@ -103,3 +103,42 @@ solo copiaba 5 tensores. Se corrigio y se agrego una prueba de equivalencia nume
 del bloque copiado coincide con la original (diferencia maxima 5e-7).
 
 **Pendiente del equipo:** analisis critico y modificaciones manuales.
+
+## Sesion — cargador con varios procesos y segundo bloqueo de Windows
+
+**Contexto:** (1) con `num_workers: 4` la ablacion con transfer learning fallo en la epoca 11
+(`OSError 22`): en Windows cada epoca recreaba los procesos y les enviaba una copia del dataset con
+los volumenes abiertos. (2) Windows bloqueo `scipy.optimize` (DLL `_arpacklib`), que se usaba solo para
+emparejar fragmentos con el algoritmo hungaro.
+
+**Que se obtuvo de la IA:** el dataset ya no envia los volumenes abiertos y los procesos de carga se crean
+una sola vez (`persistent_workers`); algoritmo hungaro propio en `src/eval/asignacion.py`; el verificador de
+entorno ahora tambien importa los modulos del proyecto, para detectar bloqueos indirectos; el cargador del
+checkpoint del Taller 3 busca los pesos dentro de la clave `backbone`.
+
+**Errores de la IA detectados:** la primera version del cargador de pesos asumia un solo diccionario y fallo
+con el formato real del Taller 3 (`backbone`, `rpn`, `det`); `verificar_entorno.py` reporto `scipy.optimize`
+como OK porque en ese momento aun no estaba bloqueado: la comprobacion por librerias sueltas no basta.
+
+**Verificacion:** 16 pruebas pasan, entre ellas el hungaro propio contra scipy en 200 matrices aleatorias con
+empates; con el bloqueo simulado corren entrenamiento, evaluacion y diagnostico; y las metricas por fragmento
+son identicas a las de la version con scipy en 144 fragmentos (mismas parejas, mismo Dice).
+
+**Pendiente del equipo:** analisis critico y modificaciones manuales.
+
+## Sesion — interpretabilidad en el notebook
+
+**Contexto:** el notebook no mostraba el gamma de BatchNorm de los bloques, Grad-CAM, como se ajustan las
+cajas ni pacientes con fractura (solo se veian caderas sin fragmentos).
+
+**Que se obtuvo de la IA:** `src/analisis.py` con gamma de BatchNorm por capa (y % de canales apagados),
+Grad-CAM y Smooth Grad-CAM de la cabeza de clasificacion comparados con el mapa de objectness (correlacion y
+masa dentro de la caja, como en el Taller 3), candidatos antes y despues del NMS, IoU de cajas en test y
+seleccion de pacientes y cortes con fractura; nueva seccion 7 del notebook y seccion 6 sobre el paciente de
+test con mas fragmentos.
+
+**Verificacion:** el notebook se ejecuto completo en modo prueba sin errores; prueba automatica de que el
+calculo del gamma detecta canales apagados. Con el modelo real, ningun canal del backbone esta apagado
+(gamma medio entre 0.91 y 0.99 por bloque).
+
+**Pendiente del equipo:** analisis critico y modificaciones manuales.

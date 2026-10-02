@@ -38,6 +38,13 @@ class CacheCaso:
             self.meta = json.load(f)
         self._img = self._lbl = self._dist = None
 
+    def __getstate__(self):
+        # En Windows los procesos de carga reciben una copia del dataset: sin esto, cada copia
+        # arrastraria los volumenes abiertos (cientos de MB) y el envio falla (OSError 22).
+        estado = self.__dict__.copy()
+        estado["_img"] = estado["_lbl"] = estado["_dist"] = None
+        return estado
+
     @property
     def img(self):
         if self._img is None:
@@ -116,6 +123,7 @@ class PengwinCortes(Dataset):
                 # en evaluacion se usan todos los cortes; en entrenamiento se submuestrea el fondo
                 if con_hueso[z] or not entrenamiento or rng.random() < frac_fondo:
                     self.indice.append((cid, z))
+            c._img = c._lbl = c._dist = None
 
     def __len__(self):
         return len(self.indice)
