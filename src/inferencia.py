@@ -21,7 +21,7 @@ from .data.dataset import pila_contexto
 from .data.preprocesamiento import a_cuadrado, deshacer_redimension, info_padding, redimensionar, ventanear
 from .models.modelo import PengwinNet
 from .postprocess.distancia import tabla_fragmentos
-from .postprocess.instancias import volumen_etiquetas
+from .postprocess.instancias import min_voxeles_efectivo, volumen_etiquetas
 from .postprocess.nms import detecciones
 
 
@@ -108,7 +108,8 @@ def inferir_volumen(modelo: PengwinNet, hu: np.ndarray, spacing, cfg: dict, devi
     if pp.get("umbral_secundario") is not None:
         rol_n = rol_con_umbral(psec_n, pp["umbral_secundario"])
     etq = volumen_etiquetas(sem_n, rol_n, borde_n.astype(np.float32), spacing,
-                            pp["min_voxeles_fragmento"], pp["max_fragmentos_por_region"],
+                            min_voxeles_efectivo(pp["min_voxeles_fragmento"], pp.get("min_volumen_ml"), spacing),
+                            pp["max_fragmentos_por_region"],
                             pp.get("usar_borde", True), pp.get("erosion_nucleo", 1),
                             pp.get("modo_instancias", "rol"))
     tabla = tabla_fragmentos(etq, spacing, dist_n.astype(np.float32), pp["percentil_distancia"])

@@ -96,6 +96,8 @@ def main():
     calidad = {}
     for nivel in args.degradacion:
         y_cls, p_cls, preds, gts, filas_frag, filas_dist, por_caso, lat = [], [], [], [], [], [], [], []
+        conteo = {"n_gt": 0, "n_pred": 0, "emparejados": 0}
+        espurios = []
         conf = np.zeros((4, 4), np.int64)
         for c in casos:
             hu, spacing, _ = leer_volumen(c["imagen"])
@@ -116,11 +118,15 @@ def main():
 
             mf = metricas_fragmentos(gt, res["etiquetas"], spacing, superficie=not args.sin_superficie)
             filas_frag += [{**f, "caso": c["id"]} for f in mf["detalle"]]
+            for k in conteo:
+                conteo[k] += mf[k]
+            espurios += [{**e, "caso": c["id"]} for e in mf["espurios"]]
             tgt = tabla_fragmentos(gt, spacing)
             filas_dist += [{**f, "caso": c["id"]} for f in comparar_con_gt(res["tabla"], tgt, res["etiquetas"], gt)]
             por_caso.append({"caso": c["id"], "dice": mf["dice_fragmento"], "iou": mf["iou_fragmento"],
                              "hd95": mf["hd95_mm"]})
             print(f"[nivel {nivel}] {c['id']}  Dice {mf['dice_fragmento']:.3f}  IoU {mf['iou_fragmento']:.3f}"
+                  f"  fragmentos {mf['n_pred']} predichos / {mf['n_gt']} reales"
                   f"  {res['latencia']['ms_por_corte']:.1f} ms/corte")
 
         err = [f["error_mm"] for f in filas_dist if f["error_mm"] is not None]
@@ -133,6 +139,12 @@ def main():
                 "iou_fragmento": float(np.mean([f["iou"] for f in filas_frag])),
                 "hd95_mm": _media_nan([f["hd95_mm"] for f in filas_frag]),
                 "assd_mm": _media_nan([f["assd_mm"] for f in filas_frag]),
+                "fragmentos_gt": conteo["n_gt"],
+                "fragmentos_pred": conteo["n_pred"],
+                "precision_fragmentos": conteo["emparejados"] / conteo["n_pred"] if conteo["n_pred"] else float("nan"),
+                "recall_fragmentos": conteo["emparejados"] / conteo["n_gt"] if conteo["n_gt"] else float("nan"),
+                "fragmentos_espurios": len(espurios),
+                "volumen_espurio_mediano_ml": float(np.median([e["volumen_ml"] for e in espurios])) if espurios else 0.0,
             },
             "distancia": {
                 "n_fragmentos_secundarios_gt": len(filas_dist),
@@ -151,7 +163,7 @@ def main():
                 for n in ("alta", "media", "baja")}
         por_nivel[nivel] = resumen
         with open(dir_out / f"fragmentos_nivel{nivel}.json", "w", encoding="utf-8") as f:
-            json.dump({"segmentacion": filas_frag, "distancia": filas_dist}, f, indent=1, default=float)
+            json.dump({"segmentacion": filas_frag, "distancia": filas_dist, "espurios": espurios}, f, indent=1, default=float)
 
     salida = {"ckpt": str(args.ckpt), "split": args.split, "casos": sorted(ids), "calidad": calidad,
               "por_nivel_degradacion": por_nivel}
@@ -167,6 +179,10 @@ def main():
     for n, v, meta in obj:
         print(f"{n:22s} {v:7.3f}   meta >= {meta:.2f}   {'OK' if v >= meta else '--'}")
     print(f"HD95 {r0['segmentacion']['hd95_mm']:.2f} mm | ASSD {r0['segmentacion']['assd_mm']:.2f} mm")
+    sg = r0["segmentacion"]
+    print(f"fragmentos {sg['fragmentos_pred']} predichos / {sg['fragmentos_gt']} reales | precision "
+          f"{sg['precision_fragmentos']:.3f} | recall {sg['recall_fragmentos']:.3f} | "
+          f"{sg['fragmentos_espurios']} espurios (mediana {sg['volumen_espurio_mediano_ml']:.2f} mL)")
     print(f"distancia MAE geometrica {r0['distancia']['mae_geometrica_mm']} mm | cabeza {r0['distancia']['mae_cabeza_mm']} mm")
     print(f"latencia {r0['latencia_ms_por_corte']['media']:.1f} ms/corte en {dev.type}")
     print(f"resultados en {dir_out}")

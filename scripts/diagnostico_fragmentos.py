@@ -42,7 +42,7 @@ from src.data.io import leer_volumen, listar_casos  # noqa: E402
 from src.data.splits import cargar_splits  # noqa: E402
 from src.eval.asignacion import asignacion_optima  # noqa: E402
 from src.inferencia import cargar_modelo, inferir_volumen, rol_con_umbral  # noqa: E402
-from src.postprocess.instancias import volumen_etiquetas  # noqa: E402
+from src.postprocess.instancias import min_voxeles_efectivo, volumen_etiquetas  # noqa: E402
 from src.utils import cargar_config, dispositivo, fijar_semilla  # noqa: E402
 
 REGIONES = {1: "SA", 2: "LI", 3: "RI"}
@@ -166,11 +166,20 @@ def postproceso(d, cfg, modo, umbral, min_vox, usar_borde, erosion):
                              cfg["postproceso"]["max_fragmentos_por_region"], usar_borde, erosion, modo)
 
 
-def resumen_dice(filas):
+def contar_pred(etq):
+    return int(sum(1 for v in np.unique(etq) if v > 0))
+
+
+def resumen_dice(filas, n_pred=None):
     df = pd.DataFrame(filas)
     sec = df[~df["principal"]]
-    return {"dice_fragmento": df["dice"].mean(), "dice_principal": df[df["principal"]]["dice"].mean(),
-            "dice_secundario": sec["dice"].mean(), "secundarios_detectados": sec["detectado"].mean()}
+    r = {"dice_fragmento": df["dice"].mean(), "dice_principal": df[df["principal"]]["dice"].mean(),
+         "dice_secundario": sec["dice"].mean(), "secundarios_detectados": sec["detectado"].mean()}
+    if n_pred is not None:
+        tp = int(df["detectado"].sum())
+        r.update({"fragmentos_pred": n_pred, "fragmentos_gt": len(df), "espurios": n_pred - tp,
+                  "precision_fragmentos": tp / n_pred if n_pred else float("nan")})
+    return r
 
 
 def main():
@@ -187,6 +196,8 @@ def main():
     ap.add_argument("--min_vox", nargs="*", type=int, default=[100, 200])
     ap.add_argument("--erosiones", nargs="*", type=int, default=[1])
     ap.add_argument("--sin_modo_borde", action="store_true", help="no probar la separacion solo por borde")
+    ap.add_argument("--barrido_tamano", action="store_true", help="prueba tamanos minimos de fragmento en mL")
+    ap.add_argument("--min_ml", nargs="*", type=float, default=[0.0, 0.5, 1.0, 2.0, 3.0])
     args = ap.parse_args()
 
     cfg = cargar_config(args.config)
@@ -207,21 +218,25 @@ def main():
 
     # ------------------------------------------------ diagnostico con el post-proceso actual
     cat, uni, frag = [], [], []
+    n_pred_actual = 0
     for c in casos:
         d = cargar(dir_cache / f"{c['id']}.npz")
         cat += [{**f, "caso": c["id"]} for f in categorizar(d["gt"], d["etq"], d["spacing"])]
         uni += [{**f, "caso": c["id"]} for f in union_secundarios(d["gt"], d["sem"], d["rol"], d["etq"])]
         frag += [{**f, "caso": c["id"]} for f in dice_fragmentos(d["gt"], d["etq"])]
+        n_pred_actual += contar_pred(d["etq"])
     cat, uni = pd.DataFrame(cat), pd.DataFrame(uni)
     dir_out.mkdir(parents=True, exist_ok=True)
     cat.to_csv(dir_out / "secundarios.csv", index=False)
     uni.to_csv(dir_out / "union_secundarios.csv", index=False)
 
     pd.set_option("display.width", 140)
-    r0 = resumen_dice(frag)
+    r0 = resumen_dice(frag, n_pred_actual)
     print(f"\n==== DIAGNOSTICO ({args.split}, {len(casos)} casos, post-proceso actual) ====")
     print(f"Dice fragmento {r0['dice_fragmento']:.3f} | principales {r0['dice_principal']:.3f} | "
           f"secundarios {r0['dice_secundario']:.3f} | secundarios detectados {r0['secundarios_detectados']:.0%}")
+    print(f"Fragmentos: {r0['fragmentos_pred']} predichos / {r0['fragmentos_gt']} reales | "
+          f"precision {r0['precision_fragmentos']:.3f} | {r0['espurios']} espurios")
 
     print("\nQue le paso a cada fragmento secundario real:")
     tabla = cat.groupby("categoria").agg(fragmentos=("gt", "size"), volumen_ml_mediana=("volumen_ml", "median"),
@@ -282,6 +297,39 @@ def main():
         print(f"  erosion_nucleo: {int(mejor['erosion'])}")
         print("Luego se evalua UNA vez sobre test con scripts/evaluar.py.")
         resumen["barrido_mejor"] = mejor.to_dict()
+
+    # ------------------------------------------------ barrido del tamano minimo de fragmento
+    if args.barrido_tamano:
+        pp = cfg["postproceso"]
+        base = (pp.get("modo_instancias", "rol"), pp.get("umbral_secundario"), pp["min_voxeles_fragmento"],
+                pp.get("usar_borde", True), pp.get("erosion_nucleo", 1))
+        vols = cat["volumen_ml"]
+        print(f"\n==== BARRIDO DE TAMANO MINIMO: {args.min_ml} mL x {len(casos)} casos ====")
+        print(f"Secundarios reales en {args.split}: el mas pequeno {vols.min():.2f} mL, percentil 10 {vols.quantile(0.1):.2f} mL")
+        por = [[] for _ in args.min_ml]
+        npr = [0] * len(args.min_ml)
+        for i, c in enumerate(casos, 1):
+            t0 = time.perf_counter()
+            d = cargar(dir_cache / f"{c['id']}.npz")
+            for k, ml in enumerate(args.min_ml):
+                mv = min_voxeles_efectivo(base[2], ml, d["spacing"])
+                etq = postproceso(d, cfg, base[0], base[1], mv, base[3], base[4])
+                por[k] += dice_fragmentos(d["gt"], etq)
+                npr[k] += contar_pred(etq)
+            del d
+            print(f"[caso {i}/{len(casos)}] {c['id']}  {time.perf_counter() - t0:.0f}s")
+        tam = pd.DataFrame([{"min_volumen_ml": ml, **resumen_dice(fr, n)} for ml, fr, n in zip(args.min_ml, por, npr)])
+        tam.to_csv(dir_out / "barrido_tamano.csv", index=False)
+        print(tam.round(3).to_string(index=False))
+        ref = tam.loc[tam["min_volumen_ml"].idxmin(), "dice_fragmento"]
+        aceptables = tam[tam["dice_fragmento"] >= ref - 0.005]
+        mejor = aceptables.sort_values(["precision_fragmentos", "dice_fragmento"], ascending=False).iloc[0]
+        print(f"\nCriterio: la mayor precision sin perder mas de 0.005 de Dice de fragmento.")
+        print(f"Recomendado: min_volumen_ml = {mejor['min_volumen_ml']} -> precision "
+              f"{mejor['precision_fragmentos']:.3f}, Dice {mejor['dice_fragmento']:.3f}, {int(mejor['espurios'])} espurios")
+        print("Para aplicarlo, en configs/default.yaml -> postproceso:")
+        print(f"  min_volumen_ml: {'null' if mejor['min_volumen_ml'] == 0 else mejor['min_volumen_ml']}")
+        resumen["barrido_tamano_mejor"] = mejor.to_dict()
 
     with open(dir_out / "resumen.json", "w", encoding="utf-8") as f:
         json.dump(resumen, f, indent=1, default=float)

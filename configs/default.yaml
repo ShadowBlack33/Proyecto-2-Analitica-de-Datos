@@ -96,3 +96,4 @@ postproceso:
   min_voxeles_fragmento: 200
   max_fragmentos_por_region: 10
   percentil_distancia: 0           # 0 = minimo exacto (borde a borde); 2-5 = mas robusto a ruido
+  min_volumen_ml: 1             # tamano minimo de fragmento en mL (se ajusta con diagnostico_fragmentos.py --barrido_tamano)

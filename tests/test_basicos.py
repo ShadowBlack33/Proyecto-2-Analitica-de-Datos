@@ -227,3 +227,27 @@ def test_gamma_batchnorm_detecta_canales_apagados():
     assert fila["canales"] == 64 and abs(fila["pct_apagados"] - 25.0) < 1e-9
     assert df.set_index("capa").loc["Backbone · bloque 1", "pct_apagados"] == 0.0
     assert len([c for c in crudos if c.startswith("Backbone")]) == 5
+
+
+def test_precision_de_fragmentos_cuenta_espurios():
+    """Un fragmento predicho de mas no cambia el Dice, pero si baja la precision."""
+    from src.eval.metricas_seg_cls import metricas_fragmentos
+
+    gt = np.zeros((10, 40, 40), np.uint8)
+    gt[2:8, 5:15, 5:15] = 11          # coxal izquierdo, principal
+    gt[2:8, 20:30, 5:15] = 12         # coxal izquierdo, un secundario
+    pred = gt.copy()
+    pred[2:4, 32:35, 32:35] = 13      # fragmento espurio pequeno
+    m = metricas_fragmentos(gt, pred, (1.0, 1.0, 1.0), superficie=False)
+    assert m["dice_fragmento"] == 1.0
+    assert (m["n_gt"], m["n_pred"], m["emparejados"]) == (2, 3, 2)
+    assert abs(m["precision_fragmentos"] - 2 / 3) < 1e-9
+    assert len(m["espurios"]) == 1 and abs(m["espurios"][0]["volumen_ml"] - 18 / 1000) < 1e-9
+
+
+def test_min_voxeles_efectivo_en_ml():
+    from src.postprocess.instancias import min_voxeles_efectivo
+
+    assert min_voxeles_efectivo(200, None, (0.8, 1.0, 1.0)) == 200
+    assert min_voxeles_efectivo(200, 1.0, (0.8, 1.0, 1.0)) == 1250     # 1 mL / 0.0008 mL por voxel
+    assert min_voxeles_efectivo(200, 0.05, (1.0, 1.0, 1.0)) == 200     # nunca baja del minimo en voxeles

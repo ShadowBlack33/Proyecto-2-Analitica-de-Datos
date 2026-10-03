@@ -125,6 +125,15 @@ def _mascaras_finales(etq, reg, region, sl, max_frag):
     return mascaras
 
 
+def min_voxeles_efectivo(min_vox: int, min_ml, spacing) -> int:
+    """Tamano minimo de fragmento en voxeles. Si se da min_ml, se usa el mayor entre los dos:
+    asi el umbral queda en unidades fisicas (mL) y no depende del tamano del voxel de cada CT."""
+    if not min_ml:
+        return int(min_vox)
+    vox_ml = float(np.prod(spacing)) / 1000.0
+    return int(max(min_vox, np.ceil(min_ml / vox_ml)))
+
+
 def volumen_etiquetas(sem: np.ndarray, rol: np.ndarray, borde: np.ndarray | None, spacing,
                       min_vox=200, max_frag=10, usar_borde=True, erosion=1, modo="rol") -> np.ndarray:
     """sem/rol (Z,H,W) a resolucion nativa -> volumen con etiquetas PENGWIN 0..30."""

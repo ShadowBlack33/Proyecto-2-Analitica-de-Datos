@@ -128,11 +128,19 @@ def distancias_superficie(a: np.ndarray, b: np.ndarray, spacing) -> tuple[float,
 
 
 def metricas_fragmentos(etq_gt: np.ndarray, etq_pred: np.ndarray, spacing, superficie=True) -> dict:
-    filas = []
+    """Metricas por fragmento del ground truth (Dice, IoU, HD95, ASSD) y, del lado de la
+    prediccion, la precision de fragmentos: que fraccion de los fragmentos predichos
+    corresponde a uno real. El Dice no penaliza fragmentos predichos de mas; la precision si."""
+    filas, espurios = [], []
+    n_pred = 0
+    vox_ml = float(np.prod(spacing)) / 1000.0
     for r in (1, 2, 3):
         g_ids = [int(v) for v in np.unique(etq_gt) if v > 0 and region_de_etiqueta(v) == r]
         p_ids = [int(v) for v in np.unique(etq_pred) if v > 0 and region_de_etiqueta(v) == r]
+        n_pred += len(p_ids)
         if not g_ids:
+            espurios += [{"pred": nombre_fragmento(p), "volumen_ml": float((etq_pred == p).sum() * vox_ml)}
+                         for p in p_ids]
             continue
         iou = np.zeros((len(g_ids), max(1, len(p_ids))))
         for i, g in enumerate(g_ids):
@@ -151,10 +159,17 @@ def metricas_fragmentos(etq_gt: np.ndarray, etq_pred: np.ndarray, spacing, super
                 if superficie:
                     fila["hd95_mm"], fila["assd_mm"] = distancias_superficie(mg, mp, spacing)
             filas.append(fila)
+        emparejados_p = set(pareja.values())
+        espurios += [{"pred": nombre_fragmento(p), "volumen_ml": float((etq_pred == p).sum() * vox_ml)}
+                     for p in p_ids if p not in emparejados_p]
+    emparejados = sum(1 for f in filas if f["pred"] is not None)
     return {
         "dice_fragmento": float(np.mean([f["dice"] for f in filas])) if filas else float("nan"),
         "iou_fragmento": float(np.mean([f["iou"] for f in filas])) if filas else float("nan"),
         "hd95_mm": _media_nan([f["hd95_mm"] for f in filas]),
         "assd_mm": _media_nan([f["assd_mm"] for f in filas]),
+        "n_gt": len(filas), "n_pred": n_pred, "emparejados": emparejados,
+        "precision_fragmentos": emparejados / n_pred if n_pred else float("nan"),
+        "espurios": espurios,
         "detalle": filas,
     }

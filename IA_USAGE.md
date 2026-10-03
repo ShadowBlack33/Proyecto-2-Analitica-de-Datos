@@ -142,3 +142,20 @@ calculo del gamma detecta canales apagados. Con el modelo real, ningun canal del
 (gamma medio entre 0.91 y 0.99 por bloque).
 
 **Pendiente del equipo:** analisis critico y modificaciones manuales.
+
+## Sesion — precision de fragmentos y tamano minimo en mL
+
+**Contexto:** en el caso 039 el modelo predijo 19 fragmentos para 9 reales; los sobrantes miden 0.27-0.68 mL.
+El Dice de fragmento se calcula desde el ground truth y no penaliza fragmentos predichos de mas.
+
+**Que se obtuvo de la IA:** `metricas_fragmentos` reporta fragmentos predichos y reales, emparejados, precision
+y la lista de fragmentos espurios con su volumen; `evaluar.py` los agrega por nivel; parametro
+`postproceso.min_volumen_ml` (tamano minimo en unidades fisicas, convertido a voxeles con el spacing de cada CT);
+`diagnostico_fragmentos.py --barrido_tamano` lo ajusta sobre validacion con el criterio "la mayor precision sin
+perder mas de 0.005 de Dice de fragmento".
+
+**Verificacion:** 19 pruebas pasan (precision con un fragmento espurio, conversion mL a voxeles); evaluar y el
+barrido corren de punta a punta con un modelo de prueba, y el barrido rechaza un minimo que elimina fragmentos
+reales pequenos.
+
+**Pendiente del equipo:** analisis critico y modificaciones manuales.
